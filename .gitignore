@@ -1,3 +1,6 @@
+.rcs
+af-update-bubba.sh
+af-update-socialbubba.sh
 lib-cov
 *.seed
 *.log
