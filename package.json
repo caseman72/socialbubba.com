@@ -1,0 +1,11 @@
+{
+ "name":"dev-social-bubba",
+  "version":"0.0.1",
+  "dependencies":{
+      "express":"",
+      "connect":"",
+      "connect-mongo":"",
+      "mongoose":"",
+      "underscore":""
+  }
+}
