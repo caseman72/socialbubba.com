@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>{{ title }}</title>
+	<link rel="stylesheet" type="text/css" href="/css/normalize.min.css" />
+	<link rel="stylesheet" type="text/css" href="/css/client.css" />
+	<script src="/js/vendor/jquery-1.8.3.min.js"></script>
+	<script src="/js/common.js"></script>
+	<script>
+		window["fb_user"] = {{ fb_user_flag }};
+		window["fb_appid"] = {{ fb_appid }};
+	</script>
+</head>
+<body>
+{{{body}}}
+<!-- scripts -->
+<div id="fb-root"></div>
+<script src="//connect.facebook.net/en_US/all.js"></script>
+<script src="/js/vendor/jquery.cookie.min.js"></script>
+<script src="/js/vendor/handlebars.min.js"></script>
+<script src="/js/client.js"></script>
+<!-- /scripts -->
+</body>
+</html>

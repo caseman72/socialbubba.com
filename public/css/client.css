@@ -1,0 +1,51 @@
+#fb-welcome {
+	margin: 10px;
+	display: inline-block;
+}
+.fb-button {
+	background-attachment: scroll;
+	background-clip: border-box;
+	background-color: #5B74A8;
+	background-image: url(http://fbstatic-a.akamaihd.net/rsrc.php/v2/y_/x/LEs9PvM-Lzy.png);
+	background-origin: padding-box;
+	background-position: -352px -495px;
+	background-repeat: no-repeat;
+	background-size: auto;
+	border-bottom-color: #1A356E;
+	border-bottom-style: solid;
+	border-bottom-width: 1px;
+	border-left-color: #29447E;
+	border-left-style: solid;
+	border-left-width: 1px;
+	border-right-color: #29447E;
+	border-right-style: solid;
+	border-right-width: 1px;
+	border-top-color: #29447E;
+	border-top-style: solid;
+	border-top-width: 1px;
+	box-shadow: rgba(0, 0, 0, 0.09804) 0px 1px 0px 0px;
+	color: #666;
+	cursor: pointer;
+	direction: ltr;
+	display: inline-block;
+	font-size: 13px;
+	font-weight: bold;
+	height: 22px;
+	line-height: 19px;
+	margin: 10px 0;
+	max-width: none;
+	padding-bottom: 0px;
+	padding-left: 6px;
+	padding-right: 6px;
+	position: static;
+	text-align: center;
+	text-decoration: none;
+	unicode-bidi: normal;
+	vertical-align: top;
+	white-space: nowrap;
+	color: #FFF;
+}
+
+.fb-button:active {
+	background: none repeat scroll 0 0 #3B5998;
+}
