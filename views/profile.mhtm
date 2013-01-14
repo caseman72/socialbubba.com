@@ -1,0 +1,12 @@
+	<div id="fb-welcome">Welcome{{#if fb_user}} {{ fb_user.name }}{{/if}}!!!</div>
+	{{#if fb_user}}
+		<img src="{{ fb_user.picture }}" height="32" width="32" style="height: 32px; width: 32px;" />
+	{{/if}}
+	<button id="fb-button-login" class="fb-button" style="display:none;">Log In with Facebook</button>
+	<button id="fb-button-logout" class="fb-button" style="display:none;">Log Out</button>
+
+	<div>{{profile.profile_id}}</div>
+	<div>{{profile.garmin_username}}</div>
+	<div>{{profile.garmin_password}}</div>
+	<div>{{profile.run_mpm.string}}</div>
+

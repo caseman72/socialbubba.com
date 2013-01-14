@@ -1,14 +1,16 @@
 // requires
-var s = require("./lib/string");
 var _ = require("underscore");
 var express = require("express");
 var mongo_store = require("connect-mongo")(express);
 var mongoose = require("mongoose");
-var restler = require("restler");
-var crypto = require("crypto");
 var hbs = require("hbs");
 
+var s = require("./lib/string");
 var fb = require("./lib/facebook");
+var models = require("./lib/models");
+var garmin = require("./lib/garmin");
+
+var top_activity = require("./lib/activity");
 
 // process.env reduced by used keys
 var process_env = _.pick(process.env, "FB_CLIENT_ID", "FB_SECRET_KEY", "SESSION_SALT", "VCAP_APP_PORT", "VCAP_SERVICES");
@@ -46,6 +48,7 @@ var config = {
 
 // facebook config values
 fb.set_config({client_id: config.fb_client_id, client_secret: config.fb_secret_key});
+models.set_config({client_id: config.fb_client_id, client_secret: config.fb_secret_key});
 
 // connect to db
 mongoose.connect(config.mongo_db);
@@ -68,43 +71,195 @@ app
 	.enable("jsonp callback");
 
 // index
-app.get("/index.htm", function(req, res) { res.redirect("/"); });
 app.get("/", fb.check_session, function(req, res) {
 	res.render("index", {
 		cache: true,
 		layout: "layouts/default",
-		title: "Social! Bubba",
+		title: "Social Bubba",
 		fb_appid: config.fb_client_id,
 		fb_user: req.session.fb && req.session.fb.user ? req.session.fb.user : null,
 		fb_user_flag: req.session.fb && req.session.fb.user ? "true" : "false"
 	});
 });
 
-// auth
-app.get(/^\/auth$/, function(req, res) { res.redirect("/auth/"); });
-app.get("/auth/", fb.check_code, function(req, res) { 
+var set_profile_id = function(req, res, next) {
+	req.profile_id = req.session.fb && req.session.fb.user_id ? req.session.fb.user_id : null;
+	next();
+};
+
+// profile
+app.get("/profile/", fb.check_session, set_profile_id, models.set_profile, function(req, res) {
+	// send the list of runs back to the client
+	res.render("profile", {
+		cache: false,
+		layout: "layouts/default",
+		title: "Social Bubba ~ Profile",
+		fb_appid: config.fb_client_id,
+		fb_user: req.session.fb && req.session.fb.user ? req.session.fb.user : null,
+		fb_user_flag: req.session.fb && req.session.fb.user ? "true" : "false",
+		profile: req.profile
+	});
+});
+
+// auth/login
+app.get(/^\/auth\/login$/, function(req, res) { res.redirect("/auth/login/"); });
+app.get("/auth/login/", fb.check_code, function(req, res) { 
 	var hash = req.session.fb && req.session.fb.user ? "#success" : "#failed {0}".format(fb.get_error());
 	res.redirect("/{0}".format(hash)); 
 });
 
-// logout
-app.get(/^\/logout$/, function(req, res) { res.redirect("/logout/"); });
-app.get("/logout/", fb.logout, function(req, res) { 
+// auth/logout
+app.get(/^\/auth\/logout$/, function(req, res) { res.redirect("/auth/logout/"); });
+app.get("/auth/logout/", fb.logout, function(req, res) { 
 	var hash = req.session.fb && req.session.fb.user ? "#failed" : "#success";
 	res.redirect("/{0}".format(hash)); 
 });
 
-// garmin proxy
-app.all(/^\/garmin\/([^\/]+)$/, function(req, res) { res.redirect("/garmin/" + req.params[0] + "/"); });
-app.get("/garmin/:id/", function(req, res) {
-	var headers = _.omit(req.headers, "host", "cookie", "x-varnish"); // remove our server stuff
+// tss
+app.all(/^\/tss\/([^\/]+)$/, function(req, res) { res.redirect("/tss/{0}/".format(req.params[0])); });
+app.get("/tss/:id/", function(req, res) {
+	var headers = _.omit(req.headers, "host", "cookie", "x-varnish", "accept-encoding"); // remove our server stuff
 	headers["host"] = "connect.garmin.com"; // rejected by garmin if not set to correct domain
-	restler
-		.get("http://connect.garmin.com/proxy/activity-service-1.2/json/activityDetails/"+ req.params.id +"/?maxSize=1000", {headers: headers})
-		.on("complete", function(data) {
-			res.json(data);
-		});
+
+	garmin.activity(req.params.id, headers, function(act_err, act_res, act_body) {
+		if (act_err) {
+			res.json({error: true, msg: 3});
+		}
+		else {
+			var json = JSON.parse(act_body);
+			json = json["com.garmin.activity.details.json.ActivityDetails"];
+
+			// hashes
+			var metrics_keys = {}
+			var metrics_values = {};
+			var metrics_averages = {};
+
+			// keys with indexes
+			_.each(json.measurements, function(obj) {
+				if (obj.key in {directPower: true, directSpeed: true, directBikeCadence: true, directHeartRate: true, sumMovingDuration: true}) {
+					metrics_keys[obj.key] = obj.metricsIndex;
+				}
+			});
+
+			// init values
+			_.each(metrics_keys, function(value, key) {
+				metrics_values[key] = [];
+			});
+
+			// fill
+			_.each(json.metrics, function(obj) {
+				_.each(metrics_keys, function(value, key) {
+					metrics_values[key].push(obj.metrics[value]);
+				});
+			});
+
+			// total seconds
+			var total_seconds = _.last(metrics_values.sumMovingDuration);
+
+			// drop seconds from hashes
+			delete metrics_keys.sumMovingDuration;
+			delete metrics_values.sumMovingDuration;
+
+			// calculate averages
+			_.each(metrics_values, function(values, key) {
+
+				var last_ten = [];
+				for(var i=0; i<10; i++) {
+					last_ten.push(values[i]);
+				}
+
+				var count = 1;
+				var sum = Math.pow( (_.reduce(last_ten, function(total, value, index){ return total + value; }, 0) / 10.0) , 4);
+
+				for (var i=10, n=values.length; i<n; i++) {
+					last_ten.shift();
+					last_ten.push(values[i]);
+					sum += Math.pow( (_.reduce(last_ten, function(total, value, index){ return total + value; }, 0) / 10.0) , 4);
+					count++;
+				}
+
+				metrics_averages[key] = Math.pow( (sum / count), 0.25);
+			});
+
+			// TODO - use profile data for the divisors
+			//
+			var metrics_tss = {};
+			if (metrics_averages.directSpeed) {
+				var directSpeed = metrics_averages["directSpeed"];
+				var directPace = 60 / directSpeed; 
+
+				var tss_directSpeed = (directSpeed/22.0)*(directSpeed/22.0)*total_seconds/3600*100;
+				var tss_directPace = (directPace/9.00)*(directPace/9.00)*total_seconds/3600*100;
+
+				if (tss_directSpeed > tss_directPace) {
+					metrics_tss["directSpeed"] = tss_directSpeed; 
+				}
+				else {
+					delete metrics_averages.directSpeed;
+					metrics_averages["directPace"] = directPace;
+					metrics_tss["directPace"] = tss_directPace;
+				}
+			}
+
+			if (metrics_averages.directHeartRate) {
+				var directHeartRate = metrics_averages["directHeartRate"];
+				metrics_tss["directHeartRate"] = (directHeartRate/150)*(directHeartRate/150)*total_seconds/3600*100;
+			}
+
+			if (metrics_averages.directBikeCadence) {
+				var directBikeCadence = metrics_averages["directBikeCadence"];
+				metrics_tss["directBikeCadence"] = (directBikeCadence/85)*(directBikeCadence/85)*total_seconds/3600*100;
+			}
+
+			if (metrics_averages.directPower) {
+				var directPower = metrics_averages["directPower"];
+				metrics_tss["directPower"] = (directPower/220)*(directPower/220)*total_seconds/3600*100;
+			}
+
+			res.json({averages: metrics_averages, tss: metrics_tss});
+		}
+	});
 });
 
-app.listen(config.server_port, function(){ console.log("Listening on " + config.server_port) });
 
+// garming activities
+app.all(/^\/garmin\/activities$/, function(req, res) { res.redirect("/garmin/activities/"); });
+app.get("/garmin/activities/", function(req, res) {
+	var headers = _.omit(req.headers, "host", "cookie", "x-varnish", "accept-encoding"); // remove our server stuff
+	headers["host"] = "connect.garmin.com"; // rejected by garmin if not set to correct domain
+
+	garmin.login("username", "password", headers, function(log_err, log_res, log_body) {
+		if (log_err) {
+			res.json({error: true, msg: 1});
+		}
+		else {
+			garmin.activities(headers, function(act_err, act_res, act_body) {
+				if (act_err) {
+					res.json({error: true, msg: 2});
+				}
+				else {
+					res.json(JSON.parse(act_body));
+				}
+			});
+		}
+	});
+});
+
+// garmin proxy
+app.all(/^\/garmin\/activity\/([^\/]+)$/, function(req, res) { res.redirect("/garmin/activity/{0}/".format(req.params[0])); });
+app.get("/garmin/activity/:id/", function(req, res) {
+	var headers = _.omit(req.headers, "host", "cookie", "x-varnish", "accept-encoding"); // remove our server stuff
+	headers["host"] = "connect.garmin.com"; // rejected by garmin if not set to correct domain
+
+	garmin.activity(req.params.id, headers, function(act_err, act_res, act_body) {
+		if (act_err) {
+			res.json({error: true, msg: 3});
+		}
+		else {
+			res.json(JSON.parse(act_body));
+		}
+	});
+});
+
+// listen!
+app.listen(config.server_port, function(){ console.log("Listening on {0}".format(config.server_port)); });

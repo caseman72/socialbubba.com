@@ -1,12 +1,12 @@
 $(document).ready(function() {
 	if (window.fb_user) {
 		$("#fb-button-logout").show().bind("click", function() {
-			window.location = "/logout/";
+			window.location = "/auth/logout/";
 		});
 	}
 	else {
 		$("#fb-button-login").show().bind("click", function() {
-			window.location = "https://www.facebook.com/dialog/oauth?client_id={0}&redirect_uri={1}&response_type=code".format(window.fb_appid, encodeURIComponent("http://dev.socialbubba.com/auth/"));
+			window.location = "https://www.facebook.com/dialog/oauth?client_id={0}&redirect_uri={1}&response_type=code".format(window.fb_appid, encodeURIComponent("http://dev.socialbubba.com/auth/login/"));
 		});
 	}
 
