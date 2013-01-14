@@ -10,8 +10,6 @@ var fb = require("./lib/facebook");
 var models = require("./lib/models");
 var garmin = require("./lib/garmin");
 
-var top_activity = require("./lib/activity");
-
 // process.env reduced by used keys
 var process_env = _.pick(process.env, "FB_CLIENT_ID", "FB_SECRET_KEY", "SESSION_SALT", "VCAP_APP_PORT", "VCAP_SERVICES");
 
