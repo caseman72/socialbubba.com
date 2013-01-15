@@ -20,7 +20,7 @@ if (typeof(express.mount) !== "undefined") {
 // fix google closure error by mapping static to mount
 express["mount"] = express["static"];
 
-// mongo db url from environment - defaults to localhost 
+// mongo db url from environment - defaults to localhost
 var mongo_db_url = (function (db_key, env) {
 	var services = JSON.parse(env.VCAP_SERVICES || "{}");
 	var mongo_dbs = "mongodb-1.8" in services ? services["mongodb-1.8"] : [];
@@ -101,16 +101,16 @@ app.get("/profile/", fb.check_session, set_profile_id, models.set_profile, funct
 
 // auth/login
 app.get(/^\/auth\/login$/, function(req, res) { res.redirect("/auth/login/"); });
-app.get("/auth/login/", fb.check_code, function(req, res) { 
+app.get("/auth/login/", fb.check_code, function(req, res) {
 	var hash = req.session.fb && req.session.fb.user ? "#success" : "#failed {0}".format(fb.get_error());
-	res.redirect("/{0}".format(hash)); 
+	res.redirect("/{0}".format(hash));
 });
 
 // auth/logout
 app.get(/^\/auth\/logout$/, function(req, res) { res.redirect("/auth/logout/"); });
-app.get("/auth/logout/", fb.logout, function(req, res) { 
+app.get("/auth/logout/", fb.logout, function(req, res) {
 	var hash = req.session.fb && req.session.fb.user ? "#failed" : "#success";
-	res.redirect("/{0}".format(hash)); 
+	res.redirect("/{0}".format(hash));
 });
 
 // tss
@@ -132,31 +132,62 @@ app.get("/tss/:id/", function(req, res) {
 			var metrics_values = {};
 			var metrics_averages = {};
 
+			// arrays
+			var seconds = null;
+			var seconds_index = null;
+			var elevation = [];
+			var elevation_index = null;
+			var elevation_start = null;
+			var elevation_end = null;
+			var distance = null;
+			var distance_index = null;
+
 			// keys with indexes
 			_.each(json.measurements, function(obj) {
-				if (obj.key in {directPower: true, directSpeed: true, directBikeCadence: true, directHeartRate: true, sumMovingDuration: true}) {
+				if (obj.key in {directPower: true, directSpeed: true, directBikeCadence: true, directHeartRate: true}) {
 					metrics_keys[obj.key] = obj.metricsIndex;
+				}
+				else if (obj.key == "sumMovingDuration") {
+					seconds_index = obj.metricsIndex;
+				}
+				else if (obj.key == "directElevation") {
+					elevation_index= obj.metricsIndex;
+				}
+				else if (obj.key == "sumDistance") {
+					distance_index= obj.metricsIndex;
 				}
 			});
 
-			// init values
+			// init arrays for each key ~ data point
 			_.each(metrics_keys, function(value, key) {
 				metrics_values[key] = [];
 			});
 
-			// fill
+			// fill in the data
 			_.each(json.metrics, function(obj) {
 				_.each(metrics_keys, function(value, key) {
 					metrics_values[key].push(obj.metrics[value]);
 				});
+				if (seconds_index) {
+					seconds = obj.metrics[seconds_index];
+				}
+				if (distance_index) {
+					distance = obj.metrics[distance_index];
+				}
+				if (elevation_index) {
+					if (!elevation_start) {
+						elevation_start = obj.metrics[elevation_index];
+					}
+					elevation_end = obj.metrics[elevation_index];
+				}
+
 			});
 
-			// total seconds
-			var total_seconds = _.last(metrics_values.sumMovingDuration);
+			// total seconds, start/end elevation
+			console.log (elevation_end - elevation_start);
+			console.log (300 * (elevation_end - elevation_start) / (5280 * distance));
+			console.log (distance);
 
-			// drop seconds from hashes
-			delete metrics_keys.sumMovingDuration;
-			delete metrics_values.sumMovingDuration;
 
 			// calculate averages
 			_.each(metrics_values, function(values, key) {
@@ -184,13 +215,13 @@ app.get("/tss/:id/", function(req, res) {
 			var metrics_tss = {};
 			if (metrics_averages.directSpeed) {
 				var directSpeed = metrics_averages["directSpeed"];
-				var directPace = 60 / directSpeed; 
+				var directPace = 60 / directSpeed;
 
-				var tss_directSpeed = (directSpeed/22.0)*(directSpeed/22.0)*total_seconds/3600*100;
-				var tss_directPace = (directPace/9.00)*(directPace/9.00)*total_seconds/3600*100;
+				var tss_directSpeed = (directSpeed/22.0)*(directSpeed/22.0)*seconds/3600*100;
+				var tss_directPace = (directPace/9.00)*(directPace/9.00)*seconds/3600*100;
 
 				if (tss_directSpeed > tss_directPace) {
-					metrics_tss["directSpeed"] = tss_directSpeed; 
+					metrics_tss["directSpeed"] = tss_directSpeed;
 				}
 				else {
 					delete metrics_averages.directSpeed;
@@ -201,17 +232,17 @@ app.get("/tss/:id/", function(req, res) {
 
 			if (metrics_averages.directHeartRate) {
 				var directHeartRate = metrics_averages["directHeartRate"];
-				metrics_tss["directHeartRate"] = (directHeartRate/150)*(directHeartRate/150)*total_seconds/3600*100;
+				metrics_tss["directHeartRate"] = (directHeartRate/150)*(directHeartRate/150)*seconds/3600*100;
 			}
 
 			if (metrics_averages.directBikeCadence) {
 				var directBikeCadence = metrics_averages["directBikeCadence"];
-				metrics_tss["directBikeCadence"] = (directBikeCadence/85)*(directBikeCadence/85)*total_seconds/3600*100;
+				metrics_tss["directBikeCadence"] = (directBikeCadence/85)*(directBikeCadence/85)*seconds/3600*100;
 			}
 
 			if (metrics_averages.directPower) {
 				var directPower = metrics_averages["directPower"];
-				metrics_tss["directPower"] = (directPower/220)*(directPower/220)*total_seconds/3600*100;
+				metrics_tss["directPower"] = (directPower/220)*(directPower/220)*seconds/3600*100;
 			}
 
 			res.json({averages: metrics_averages, tss: metrics_tss});
@@ -222,11 +253,11 @@ app.get("/tss/:id/", function(req, res) {
 
 // garming activities
 app.all(/^\/garmin\/activities$/, function(req, res) { res.redirect("/garmin/activities/"); });
-app.get("/garmin/activities/", function(req, res) {
+app.get("/garmin/activities/", set_profile_id, models.set_profile, function(req, res) {
 	var headers = _.omit(req.headers, "host", "cookie", "x-varnish", "accept-encoding"); // remove our server stuff
 	headers["host"] = "connect.garmin.com"; // rejected by garmin if not set to correct domain
 
-	garmin.login("username", "password", headers, function(log_err, log_res, log_body) {
+	garmin.login(req.profile.garmin_username, req.profile.garmin_password, headers, function(log_err, log_res, log_body) {
 		if (log_err) {
 			res.json({error: true, msg: 1});
 		}
