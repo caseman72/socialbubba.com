@@ -4,7 +4,6 @@ var express = require("express");
 var mongo_store = require("connect-mongo")(express);
 var mongoose = require("mongoose");
 var hbs = require("hbs");
-var toobusy = require("toobusy");
 
 var s = require("./lib/string");
 var fb = require("./lib/facebook");
@@ -36,9 +35,6 @@ var mongo_db_url = (function (db_key, env) {
 	return db_key in mongo_urls ? mongo_urls[db_key] : "mongodb://localhost/mongo_devsb";
 })("mongo_devsb", process_env);
 
-// too busy handler
-var toobusy_handler = function(req, res, next) { toobusy() ? res.send(503, "I'm too busy right now, sorry.") : next(); };
-
 // profile handler
 var profile_handler = function(req, res, next) {
 	req.profile_id = req.session.fb && req.session.fb.user_id ? req.session.fb.user_id : null;
@@ -65,7 +61,6 @@ mongoose.connect(config.mongo_db);
 // app setup
 var app = express.createServer();
 app
-	.use(toobusy_handler)
 	.use(express.logger())
 	.use(express.cookieParser(config.session_salt))
 	.use(express.session({secret: config.session_salt, store: new mongo_store({url: config.mongo_db})}))
@@ -262,7 +257,7 @@ app.get("/tss/:id/", function(req, res) {
 
 // garming activities
 app.all(/^\/garmin\/activities$/, function(req, res) { res.redirect("/garmin/activities/"); });
-	app.get("/garmin/activities/", fb.check_session, profile_handler, models.set_profile, function(req, res) {
+app.get("/garmin/activities/", fb.check_session, profile_handler, models.set_profile, function(req, res) {
 	var headers = _.omit(req.headers, "host", "cookie", "x-varnish", "accept-encoding"); // remove our server stuff
 	headers["host"] = "connect.garmin.com"; // rejected by garmin if not set to correct domain
 
@@ -302,8 +297,3 @@ app.get("/garmin/activity/:id/", function(req, res) {
 // listen!
 app.listen(config.server_port, function(){ console.log("Listening on {0}".format(config.server_port)); });
 
-// grace
-process.on("SIGINT", function() {
-	app.close();
-	toobusy.shutdown();
-});
